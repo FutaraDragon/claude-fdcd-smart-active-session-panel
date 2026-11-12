@@ -87,7 +87,8 @@ list flips through them.
 start `claude` and type:
 
 ```
-/plugin install fdcd-smart-active-session-panel --marketplace FutaraDragon/claude-fdcd-smart-active-session-panel
+/plugin marketplace add FutaraDragon/claude-fdcd-smart-active-session-panel
+/plugin install fdcd-smart-active-session-panel@fdcd-smart-active-session-panel
 ```
 
 or, from an unzipped copy, with your own path:
