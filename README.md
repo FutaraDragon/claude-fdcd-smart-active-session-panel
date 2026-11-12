@@ -1,3 +1,5 @@
+![Smart Active Sessions panel](screenshot.png)
+
 ## Developer Rawr Zone
 
 This is project is come up because of while I working in company so my team lead told me about Claude App release claude mod so maybe try to make some panel that solve the session panel on left side issue about too much session and can not find what work we are doing when do like multi session in same time
