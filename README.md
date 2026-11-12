@@ -77,9 +77,11 @@ list flips through them.
 
 **In the desktop app** (tested):
 
-1. Open **Directory → Plugins**, press **+**, and choose the zip file itself (no need to
+1. Download the zip from the
+   [Releases page](https://github.com/FutaraDragon/claude-fdcd-smart-active-session-panel/releases).
+2. Open **Directory → Plugins**, press **+**, and choose the zip file itself (no need to
    unzip it).
-2. Type `/reload-plugins` (or restart the app). The panel opens by itself in new sessions.
+3. Type `/reload-plugins` (or restart the app). The panel opens by itself in new sessions.
 
 **Or in a terminal** (not the desktop Code tab, where `/plugin` opens the Directory instead):
 start `claude` and type:
