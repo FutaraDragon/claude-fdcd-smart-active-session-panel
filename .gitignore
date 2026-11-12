@@ -1,0 +1,6 @@
+dist/
+.claude-plugin/types/
+node_modules/
+*.zip
+NOTES.md
+IDEAS.md

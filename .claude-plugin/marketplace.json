@@ -1,0 +1,6 @@
+{
+  "name": "fdcd-smart-active-session-panel",
+  "description": "The Smart Active Sessions panel for the Claude desktop app, by FutaraDragon.",
+  "owner": { "name": "FutaraDragon" },
+  "plugins": [{ "name": "fdcd-smart-active-session-panel", "source": "./" }]
+}
