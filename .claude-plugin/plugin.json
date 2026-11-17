@@ -1,6 +1,6 @@
 {
   "name": "fdcd-smart-active-session-panel",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "description": "A side panel in the Claude desktop app listing the sessions active in the last days (1 to 7, your choice) as cards: a status stripe (working, asking, done), folder colors, last reply, model, context use, background tasks and pins. Click a card to open that session; + opens a new one. Shows the account's usage limits.\nBy FutaraDragon + Claude Derg",
   "icon": "./icon.png",
   "author": {

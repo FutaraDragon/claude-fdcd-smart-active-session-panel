@@ -112,9 +112,11 @@ In any desktop Code tab session, type:
 /fdcd-smart-active-session-panel
 ```
 
-The panel opens on the right. It updates within about a second when any session changes
-(a reply, a question, a background task), and when you switch sessions; it does not rebuild
-the list on a timer.
+The panel opens on the right. It updates about 2 seconds after any session changes (a reply,
+a question, a background task), and when you switch sessions; it does not rebuild the list
+on a timer. The usage bars take one more look a few seconds later, because the app's own
+numbers arrive a little after the reply, and they update by themselves when a 5-hour or
+weekly limit resets.
 
 It also **opens by itself in every new session**. To turn that off, change the plugin's setting
 **Open the panel in every new session** (in the plugin's settings / config menu); the command
@@ -154,8 +156,11 @@ above still opens it any time.
   Only pins, folds and colors are lost.
 - **How it stays live without polling.** Each session that changes writes the time into a tiny
   `pulse.json` in the same folder; the panel reads that one file every second (local, cheap) and
-  refreshes only when it changed. A broken or missing file just triggers one refresh and is
-  written again. Sessions without the mod update when you click them.
+  refreshes 2 seconds after it changed. A broken or missing file just triggers one refresh and
+  is written again. Sessions without the mod update when you click them.
+- **Usage while a reply is running.** The app's own usage card can be about 1% ahead while a
+  reply is still being written; the app's tools do not have that number yet, so the panel (and
+  its ↻) catch up when the reply ends.
 
 ## License
 

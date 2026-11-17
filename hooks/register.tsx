@@ -7,7 +7,7 @@ import type { CardProps } from './card'
 const PANE = 'fdcd-smart-active-session-panel'
 // Shown at the top right. A mod is not told its own manifest version, so it is written here;
 // the build checks it matches plugin.json
-const VERSION = '1.5.0'
+const VERSION = '1.5.1'
 const SERVER = 'ccd_session_mgmt'
 const REFRESH_MS = 5_000
 
@@ -39,8 +39,8 @@ async function togglePin($: EngineInterface, id: string) {
 const theme = atom({ plugin: 'fdcd-smart-active-session-panel', key: 'theme' } as const, '')
 
 // The Microsoft Store (packaged, MSIX) app keeps its config elsewhere: %APPDATA%\Claude holds only
-// a marker, the real one is %LOCALAPPDATA%\Claude-Data\<claude_…>\config.json (a colleague's PC,
-// 2026-11-11: his panel drew dark in light mode). Older packaged builds: Packages\Claude_…
+// a marker, the real one is %LOCALAPPDATA%\Claude-Data\<claude_…>\config.json (a user's PC,
+// 2026-11-11: the panel drew dark in light mode). Older packaged builds: Packages\Claude_…
 async function packagedConfigs($: EngineInterface): Promise<string[]> {
   const local = await $.env.get('LOCALAPPDATA')
   if (!local) return []
@@ -168,13 +168,64 @@ async function pulseTick($: EngineInterface) {
   } catch {
     now = 'bad'
   }
+  await checkResets($)
   if (now === lastPulse) return
   const first = lastPulse === ''
   lastPulse = now
   if (now === 'bad') pulse($)
   if (first) return
-  void refreshIfOpen($)
-  void bandTick($, true)
+  refreshSoon($)
+}
+
+// The app's numbers land a moment after the event that announced them (FutaraDragon,
+// 2026-11-17): wait 2 s. Pulses inside the wait share it; the timer never restarts, so a busy
+// session cannot push the refresh away forever
+const SETTLE_MS = 2_000
+let settleTimer: { cancel: () => void } | undefined
+
+function refreshSoon($: EngineInterface) {
+  if (settleTimer) return
+  settleTimer = $.clock.after(SETTLE_MS, () => {
+    settleTimer = undefined
+    void refreshIfOpen($)
+    void bandTick($, true)
+  })
+  // The usage numbers can land even later than 2 s (2026-11-17): one more look at 6 s, usage only
+  if (usageTimer) return
+  usageTimer = $.clock.after(USAGE_LATE_MS, () => {
+    usageTimer = undefined
+    void lateUsage($)
+  })
+}
+
+// 12 s was tried and caught nothing more (2026-11-17): while a reply still runs, the app's own
+// card is ahead of get_usage, and no mod can see that number
+const USAGE_LATE_MS = 6_000
+let usageTimer: { cancel: () => void } | undefined
+
+async function lateUsage($: EngineInterface) {
+  if (!seenOnScreen) return
+  const isOpen = (await $.ui.panes()).some(pane => pane.id === PANE)
+  if (!isOpen && !bandShown) return
+  const limitsNow = await readLimits($, isOpen || lastKeep)
+  await update($, limits, () => limitsNow)
+  if (isOpen) await markFireworks($, limitsNow)
+}
+
+// A 5-hour or weekly limit passes its reset time: nothing announces it, so refresh 2 s after.
+// Each reset time is handled once, even if the app still answers the old one
+const handledResets = new Set<string>()
+
+async function checkResets($: EngineInterface) {
+  const shown = (await read($, limits)) as UsageLimit[]
+  for (const l of shown) {
+    if (!l?.resetsAt || handledResets.has(l.resetsAt)) continue
+    const at = new Date(l.resetsAt).getTime()
+    if (Number.isNaN(at) || Date.now() < at + SETTLE_MS) continue
+    handledResets.add(l.resetsAt)
+    void refreshIfOpen($)
+    void bandTick($, true)
+  }
 }
 
 type Shared = { writer?: { id: string; at: number }; limits?: { at: string; limits: UsageLimit[] }; prs?: Record<string, string> }
@@ -224,7 +275,7 @@ async function saveLimits($: EngineInterface, usage: any) {
 
 // The app's own usage card numbers, live (get_usage, local, no tokens). A session's own
 // rateLimits change only after its own reply, so an idle panel showed 3% / 64% while the app
-// showed 11% / 66%, and saved its old numbers over newer ones every refresh (team, 2026-10-28)
+// showed 11% / 66%, and saved its old numbers over newer ones every refresh (user feedback, 2026-10-28)
 function planLimits(plan: any): UsageLimit[] {
   if (plan?.status !== 'ok') return []
   return ((plan.windows ?? []) as any[])
@@ -920,7 +971,7 @@ function tryParse(result: any): any {
 
 // Every field gets a safe default; only the id is required (a row without one is dropped).
 // One odd value used to stop the whole panel drawing, in every session ("has not drawn in
-// this pane" after a session switch, team, 2026-10-28)
+// this pane" after a session switch, user feedback, 2026-10-28)
 const text = (v: unknown, fallback = '') => (typeof v === 'string' ? v : v == null ? fallback : String(v))
 const isoTime = (v: unknown) => (typeof v === 'string' && !Number.isNaN(new Date(v).getTime()) ? v : '')
 
@@ -1533,7 +1584,7 @@ export const register: Register = (on, options) => {
     const done = await next(e)
     if (done?.text) saveInfo($, info => ({ ...info, reply: shortText(done.text) }))
     pulse($)
-    void refreshIfOpen($)
+    refreshSoon($)
     return done
   })
 
@@ -1787,7 +1838,7 @@ export const register: Register = (on, options) => {
       // Half a row under the pane's height, so the app shows no scrollbar
       <Box flexDirection="column" height={Math.max(0, bodyRows - 0.5)} position="relative">
         <Box key="box1" flexDirection="column" flexShrink={0}>
-          {/* The very top, asked back by the team (2026-10-27): when the list was updated, and a
+          {/* The very top, asked back by users (2026-10-27): when the list was updated, and a
               click anywhere on the line refreshes it now */}
           <Box key="top-row" flexDirection="row" justifyContent="space-between" marginBottom={0.5}>
           <Box key="updated" position="relative" flexShrink={0}>
