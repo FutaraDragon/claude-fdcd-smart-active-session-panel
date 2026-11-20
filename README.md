@@ -114,9 +114,10 @@ In any desktop Code tab session, type:
 
 The panel opens on the right. It updates about 2 seconds after any session changes (a reply,
 a question, a background task), and when you switch sessions; it does not rebuild the list
-on a timer. The usage bars take one more look a few seconds later, because the app's own
-numbers arrive a little after the reply, and they update by themselves when a 5-hour or
-weekly limit resets.
+on a timer. The usage bars are the one exception: the session on screen asks the app for
+them every 5 seconds (a local call, no tokens), because usage also changes where no event
+reaches the panel (another computer or claude.ai on the same plan, or the app's own number
+landing late). They also update by themselves when a 5-hour or weekly limit resets.
 
 It also **opens by itself in every new session**. To turn that off, change the plugin's setting
 **Open the panel in every new session** (in the plugin's settings / config menu); the command
@@ -160,7 +161,7 @@ above still opens it any time.
   is written again. Sessions without the mod update when you click them.
 - **Usage while a reply is running.** The app's own usage card can be about 1% ahead while a
   reply is still being written; the app's tools do not have that number yet, so the panel (and
-  its ↻) catch up when the reply ends.
+  its ↻) catch up within a few seconds.
 
 ## License
 

@@ -7,7 +7,7 @@ import type { CardProps } from './card'
 const PANE = 'fdcd-smart-active-session-panel'
 // Shown at the top right. A mod is not told its own manifest version, so it is written here;
 // the build checks it matches plugin.json
-const VERSION = '1.5.1'
+const VERSION = '1.5.2'
 const SERVER = 'ccd_session_mgmt'
 const REFRESH_MS = 5_000
 
@@ -190,24 +190,21 @@ function refreshSoon($: EngineInterface) {
     void refreshIfOpen($)
     void bandTick($, true)
   })
-  // The usage numbers can land even later than 2 s (2026-11-17): one more look at 6 s, usage only
-  if (usageTimer) return
-  usageTimer = $.clock.after(USAGE_LATE_MS, () => {
-    usageTimer = undefined
-    void lateUsage($)
-  })
 }
 
-// 12 s was tried and caught nothing more (2026-11-17): while a reply still runs, the app's own
-// card is ahead of get_usage, and no mod can see that number
-const USAGE_LATE_MS = 6_000
-let usageTimer: { cancel: () => void } | undefined
+// Usage changes where no event reaches us: other machines and claude.ai on the same plan, and
+// the app's own number lands 10+ s late (FutaraDragon, 2026-11-20). So the session on screen
+// asks every 5 s, usage only (get_usage is local to the app: no tokens, no API of ours).
+// Sessions off screen never ask
+const USAGE_MS = 5_000
+const limitsKey = (list: UsageLimit[]) => list.map(l => `${l.label}:${l.percent}:${l.resetsAt ?? ''}`).join()
 
-async function lateUsage($: EngineInterface) {
+async function usageTick($: EngineInterface) {
   if (!seenOnScreen) return
   const isOpen = (await $.ui.panes()).some(pane => pane.id === PANE)
   if (!isOpen && !bandShown) return
   const limitsNow = await readLimits($, isOpen || lastKeep)
+  if (limitsKey(limitsNow) === limitsKey((await read($, limits)) as UsageLimit[])) return
   await update($, limits, () => limitsNow)
   if (isOpen) await markFireworks($, limitsNow)
 }
@@ -1455,6 +1452,7 @@ export const register: Register = (on, options) => {
       description: 'Open the panel of recently active sessions',
     })
     $.clock.every(PULSE_MS, () => void pulseTick($))
+    $.clock.every(USAGE_MS, () => void usageTick($))
     $.clock.every(REFRESH_MS, () => void bandTick($))
     $.clock.every(LAYOUT_MS, () => {
       layoutTick += 1
@@ -1479,6 +1477,7 @@ export const register: Register = (on, options) => {
     saveInfo($, info => ({ ...info, seenAt: new Date().toISOString() }))
     seenOnScreen = true // check every second again: the layout may not show this session yet
     void keepOnePanel($)
+    void usageTick($)
     return next(e)
   })
 
