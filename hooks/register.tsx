@@ -7,7 +7,7 @@ import type { CardProps } from './card'
 const PANE = 'fdcd-smart-active-session-panel'
 // Shown at the top right. A mod is not told its own manifest version, so it is written here;
 // the build checks it matches plugin.json
-const VERSION = '1.5.2'
+const VERSION = '1.5.6'
 const SERVER = 'ccd_session_mgmt'
 const REFRESH_MS = 5_000
 
@@ -1364,6 +1364,24 @@ async function panelOff($: EngineInterface): Promise<boolean> {
   return (await $.store.get(PANEL_OFF_KEY).catch(() => false)) === true
 }
 
+let sawOpen = false
+let keptLast = false
+
+// A debug build sets this true (stage copy only): each step is toasted and added to debug.log
+const DEBUG = false
+function dbg($: EngineInterface, text: string) {
+  if (!DEBUG) return
+  const line = `[dbg ${new Date().toISOString().slice(11, 19)}] ${text}`
+  $.ui.toast(line)
+  void (async () => {
+    try {
+      const path = `${await dataDir($)}/debug.log`
+      const old = await $.fs.read(path).then(String, () => '')
+      await $.fs.write(path, (old + line + '\n').slice(-20000))
+    } catch {}
+  })()
+}
+
 async function keepOnePanel($: EngineInterface) {
   const { keep, ids } = await readLayout($)
   const before = (await read($, onScreen)) as string[]
@@ -1373,12 +1391,29 @@ async function keepOnePanel($: EngineInterface) {
     if (before.length > 0) void refreshIfOpen($)
   }
   const isOpen = (await $.ui.panes()).some(pane => pane.id === PANE)
+  // On macOS the ✕ closes the pane but no ui.close reaches this mod (2026-11-25), so the panel
+  // came back within a second. Seen here instead: open on the last check, gone now, still on
+  // screen both times, and not closed by us, so the person closed it
+  const goneByHand = sawOpen && keptLast && keep && !isOpen && !closingByUs
+  if (sawOpen && !isOpen) dbg($, `pane gone keep=${keep} keptLast=${keptLast} onScreen=${seenOnScreen} closingByUs=${closingByUs} panes=${(await $.ui.panes()).map(p => p.id).join('|')}`)
+  sawOpen = isOpen
+  keptLast = keep
+  if (goneByHand && !(await panelOff($))) {
+    await $.store.set(PANEL_OFF_KEY, true).then(
+      () => dbg($, 'off saved ok'),
+      err => dbg($, `off save failed ${String(err).slice(0, 150)}`),
+    )
+    $.ui.invalidate('ui.render')
+    return
+  }
   if (!keep && isOpen) {
     closingByUs = true
     await $.ui.close({ id: PANE }).finally(() => { closingByUs = false })
+    sawOpen = false
     closedForSplit = true
     $.ui.invalidate('ui.render')
   } else if (keep && !isOpen && (closedForSplit || autoOpenSetting) && !(await panelOff($))) {
+    dbg($, `reopen keep=${keep} closedForSplit=${closedForSplit} autoOpen=${autoOpenSetting} panelOff=false`)
     closedForSplit = false
     await openPanel($)
     void refresh($)
@@ -1518,10 +1553,23 @@ export const register: Register = (on, options) => {
 
   // The person closes the panel: off for every session until the command opens it again
   on('ui.close', async ($, e, next) => {
-    if (e.id === PANE && e.origin?.kind === 'person' && !closingByUs && (await readLayout($)).keep) {
-      await $.store.set(PANEL_OFF_KEY, true)
-    }
+    // Any close we did not make ourselves is the person's: on macOS the ✕ never turned the panel
+    // off (2026-11-25), so the 1 s check opened it again at once. Our own closes are known by
+    // closingByUs alone; the kind and the layout were not trustworthy there
+    const byPerson = e.id === PANE && !closingByUs && e.origin?.kind !== 'unload'
+    dbg($, `close event id=${e.id} kind=${String(e.origin?.kind)} closingByUs=${closingByUs}`)
+    // Close first, always: a hook that stops before next(e) keeps the pane open, so a failed
+    // save left the ✕ doing nothing at all on macOS (2026-11-25)
     const closed = await next(e)
+    if (byPerson) {
+      try {
+        await $.store.set(PANEL_OFF_KEY, true)
+      } catch (err) {
+        const healed = await repairStore($, err).catch(() => false)
+        const saved = healed && (await $.store.set(PANEL_OFF_KEY, true).then(() => true, () => false))
+        if (!saved) $.ui.toast(`Smart sessions: could not turn the panel off: ${String(err).slice(0, 200)}`)
+      }
+    }
     if (e.id === PANE) $.ui.invalidate('ui.render')
     return closed
   })
@@ -1637,6 +1685,14 @@ export const register: Register = (on, options) => {
     }
     if (data?.act === 'pins') {
       await togglePins($)
+      return {}
+    }
+    if (data?.act === 'close') {
+      await $.store.set(PANEL_OFF_KEY, true).catch(err => dbg($, `close button save failed ${String(err).slice(0, 150)}`))
+      closingByUs = true
+      await $.ui.close({ id: PANE }).finally(() => { closingByUs = false })
+      sawOpen = false
+      $.ui.invalidate('ui.render')
       return {}
     }
     if (data?.act === 'expand') {
@@ -1852,8 +1908,17 @@ export const register: Register = (on, options) => {
               <Client key="updated-hit" module="./hit.tsx" width="100%" props={plain({ message: { act: 'refresh' } })} />
             </Box>
           </Box>
-          <Box key="version" width={Math.max(6, Math.ceil((VERSION.length + 1) * 0.8) + 1)} flexShrink={0}>
-            <Svg source={labelSvg([{ text: `v${VERSION}`, dim: true }], tones.ink ?? '#8a8a8a', true)} alt={`version ${VERSION}`} height={FOLDER_PX} />
+          <Box key="top-right" flexDirection="row" flexShrink={0}>
+            <Box key="version" width={Math.max(6, Math.ceil((VERSION.length + 1) * 0.8) + 1)} flexShrink={0}>
+              <Svg source={labelSvg([{ text: `v${VERSION}`, dim: true }], tones.ink ?? '#8a8a8a', true)} alt={`version ${VERSION}`} height={FOLDER_PX} />
+            </Box>
+            {/* Our own close: the macOS app never passes its ✕ on to a mod's pane (2026-11-25) */}
+            <Box key="close" position="relative" flexShrink={0} marginLeft={1}>
+              {hov(Box, Svg, hoverColor(themeMode), { source: fitLabelSvg([{ text: '✕', dim: false }], tones.ink ?? '#8a8a8a'), alt: 'close the panel', height: FOLDER_PX })}
+              <Box position="absolute" top={0} left={0} right={0} bottom={0}>
+                <Client key="close-hit" module="./hit.tsx" width="100%" props={plain({ message: { act: 'close' } })} />
+              </Box>
+            </Box>
           </Box>
           </Box>
           {/* The account's usage, side by side: each half is one SVG (icon, percent, thin bar,

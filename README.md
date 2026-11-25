@@ -128,7 +128,8 @@ above still opens it any time.
 - **One panel at a time:** only the session you are looking at shows the panel; the others
   close theirs and do no work, and it opens again when you come back. In a split view the
   right-most session shows it.
-- **Closing the panel** (✕) turns it off in every session, and a small **band above the chat
+- **Closing the panel** (the **✕** in the panel's own top row, next to the version; on Windows
+  the app's ✕ works too, on macOS only ours does) turns it off in every session, and a small **band above the chat
   input** takes its place in every session on screen: **⤢** opens the panel again, **+** opens a
   new session, then the **5-hour** and **weekly** bars and this session's **context** bar (hover
   a bar for its name, reset time or token count), and the green PR mark for an open PR. While
